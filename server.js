@@ -6,7 +6,7 @@ const path = require("path");
 const fs = require("fs");
 const pdfParse = require("pdf-parse");
 const mammoth = require("mammoth");
-const OpenAI = require("openai");
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const XLSX = require("xlsx");
 const rateLimit = require("express-rate-limit");
 const { listResumesInFolder, searchFolders, getFolderInfo, processDriveFolder } = require("./googleDrive");
@@ -44,8 +44,36 @@ const upload = multer({
   },
 });
 
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// AI Client (Gemini or OpenAI fallback)
+let genAI = null;
+let geminiModel = null;
+if (process.env.GEMINI_API_KEY) {
+  genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  geminiModel = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-1.5-flash" });
+  console.log("Using Google Gemini (FREE)");
+} else if (process.env.OPENAI_API_KEY) {
+  console.log("Using OpenAI");
+}
+
+// AI generation function (supports both Gemini and OpenAI)
+async function generateAIResponse(prompt) {
+  if (geminiModel) {
+    const result = await geminiModel.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
+  } else if (process.env.OPENAI_API_KEY) {
+    const openai = new (require("openai"))({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.1,
+      max_tokens: 800,
+    });
+    return response.choices[0].message.content.trim();
+  } else {
+    throw new Error("No AI provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY");
+  }
+}
 
 // ─── Resume Text Extraction ───────────────────────────────────────────────────
 async function extractText(buffer, filename) {
@@ -90,14 +118,11 @@ Extract and return this JSON structure:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      max_tokens: 800,
-    });
-    const content = response.choices[0].message.content.trim();
-    return JSON.parse(content);
+    const content = await generateAIResponse(prompt);
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || content.match(/```\s*([\s\S]*?)```/) || [null, content];
+    const jsonStr = jsonMatch[1].trim();
+    return JSON.parse(jsonStr);
   } catch (err) {
     console.error(`AI extraction failed for ${filename}:`, err.message);
     return {
@@ -168,14 +193,11 @@ Evaluate and return:
 }`;
 
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.1,
-      max_tokens: 400,
-    });
-    const content = response.choices[0].message.content.trim();
-    const score = JSON.parse(content);
+    const content = await generateAIResponse(prompt);
+    // Extract JSON from response (handle markdown code blocks)
+    const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || content.match(/```\s*([\s\S]*?)```/) || [null, content];
+    const jsonStr = jsonMatch[1].trim();
+    const score = JSON.parse(jsonStr);
     return { ...candidate, ...score };
   } catch (err) {
     console.error(`Scoring failed for ${candidate.name}:`, err.message);
@@ -197,9 +219,12 @@ Evaluate and return:
 
 // Health check
 app.get("/api/health", (req, res) => {
+  const aiProvider = process.env.GEMINI_API_KEY ? "gemini" : 
+                     process.env.OPENAI_API_KEY ? "openai" : "none";
   res.json({ 
     status: "ok", 
     timestamp: new Date().toISOString(),
+    aiProvider,
     googleDrive: !!(process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY)
   });
 });
@@ -265,8 +290,8 @@ app.post("/api/rank-drive", express.json(), async (req, res) => {
       return res.status(400).json({ error: "Job description is incomplete" });
     }
     
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "OpenAI API key not configured" });
+    if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: "AI API key not configured. Set GEMINI_API_KEY or OPENAI_API_KEY" });
     }
     
     if (!process.env.GOOGLE_CLIENT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY) {
@@ -335,8 +360,8 @@ app.post("/api/rank", upload.array("resumes", 50), async (req, res) => {
       return res.status(400).json({ error: "Job description is incomplete." });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ error: "OpenAI API key not configured." });
+    if (!process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ error: "AI API key not configured. Set GEMINI_API_KEY or OPENAI_API_KEY" });
     }
 
     // Step 1: Extract text from all resumes
@@ -454,6 +479,9 @@ app.post("/api/export", express.json({ limit: "5mb" }), (req, res) => {
 });
 
 app.listen(PORT, () => {
+  const aiProvider = process.env.GEMINI_API_KEY ? "Google Gemini (FREE)" : 
+                     process.env.OPENAI_API_KEY ? "OpenAI" : "NOT CONFIGURED";
   console.log(`Resume Ranker API running on http://localhost:${PORT}`);
+  console.log(`AI Provider: ${aiProvider}`);
   console.log(`Google Drive integration: ${process.env.GOOGLE_CLIENT_EMAIL ? 'ENABLED' : 'DISABLED'}`);
 });
