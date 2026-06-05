@@ -14,6 +14,9 @@ const { listResumesInFolder, searchFolders, getFolderInfo, processDriveFolder } 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Trust proxy for Vercel/Railway/Render
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
@@ -49,8 +52,10 @@ let genAI = null;
 let geminiModel = null;
 if (process.env.GEMINI_API_KEY) {
   genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  geminiModel = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-1.5-flash" });
-  console.log("Using Google Gemini (FREE)");
+  // Use gemini-1.5-flash-latest or gemini-pro for best results
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  geminiModel = genAI.getGenerativeModel({ model: modelName });
+  console.log(`Using Google Gemini (FREE) - Model: ${modelName}`);
 } else if (process.env.OPENAI_API_KEY) {
   console.log("Using OpenAI");
 }
@@ -58,9 +63,14 @@ if (process.env.GEMINI_API_KEY) {
 // AI generation function (supports both Gemini and OpenAI)
 async function generateAIResponse(prompt) {
   if (geminiModel) {
-    const result = await geminiModel.generateContent(prompt);
-    const response = await result.response;
-    return response.text();
+    try {
+      const result = await geminiModel.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (err) {
+      console.error("Gemini API error:", err.status, err.message, JSON.stringify(err.errorDetails || {}));
+      throw err;
+    }
   } else if (process.env.OPENAI_API_KEY) {
     const openai = new (require("openai"))({ apiKey: process.env.OPENAI_API_KEY });
     const response = await openai.chat.completions.create({
