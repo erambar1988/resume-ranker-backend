@@ -176,7 +176,7 @@ Return this exact JSON:
 
 // ─── Process resumes in parallel batches ─────────────────────────────────────
 async function processResumesBatch(files, jd) {
-  const batchSize = 1;
+  const batchSize = 3;
   const results = [];
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
@@ -187,7 +187,7 @@ async function processResumesBatch(files, jd) {
       })
     );
     results.push(...batchResults);
-    if (i + batchSize < files.length) await sleep(4000);
+    if (i + batchSize < files.length) await sleep(2000);
   }
   return results;
 }
