@@ -152,8 +152,10 @@ Extract and return this JSON structure:
 }
 
 // ─── AI: Score candidates against JD ─────────────────────────────────────────
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function scoreCandidatesBatch(candidates, jd) {
-  const batchSize = 5;
+  const batchSize = 2;
   const results = [];
 
   for (let i = 0; i < candidates.length; i += batchSize) {
@@ -163,6 +165,9 @@ async function scoreCandidatesBatch(candidates, jd) {
     );
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
+    if (i + batchSize < candidates.length) {
+      await sleep(2000);
+    }
   }
 
   return results;
@@ -330,11 +335,14 @@ app.post("/api/rank-drive", express.json(), async (req, res) => {
     });
     const extracted = await Promise.all(extractionPromises);
     
-    // Extract candidate info via AI
-    const infoPromises = extracted.map(({ text, filename }) =>
-      extractCandidateInfo(text, filename)
-    );
-    const candidates = await Promise.all(infoPromises);
+    // Extract candidate info via AI (sequential with delay to avoid rate limits)
+    const candidates = [];
+    for (let i = 0; i < extracted.length; i++) {
+      const { text, filename } = extracted[i];
+      const info = await extractCandidateInfo(text, filename);
+      candidates.push(info);
+      if (i < extracted.length - 1) await sleep(1500);
+    }
     
     // Score all candidates
     const scored = await scoreCandidatesBatch(candidates, jd);
