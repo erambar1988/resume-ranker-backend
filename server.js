@@ -47,6 +47,8 @@ const upload = multer({
   },
 });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // AI Client (Gemini or OpenAI fallback)
 let genAI = null;
 let geminiModel = null;
@@ -60,16 +62,25 @@ if (process.env.GEMINI_API_KEY) {
   console.log("Using OpenAI");
 }
 
-// AI generation function (supports both Gemini and OpenAI)
-async function generateAIResponse(prompt) {
+// AI generation function with retry on rate limit
+async function generateAIResponse(prompt, retries = 4) {
   if (geminiModel) {
-    try {
-      const result = await geminiModel.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
-    } catch (err) {
-      console.error("Gemini API error:", err.status, err.message, JSON.stringify(err.errorDetails || {}));
-      throw err;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const result = await geminiModel.generateContent(prompt);
+        const response = await result.response;
+        return response.text();
+      } catch (err) {
+        const status = err.status || (err.message && err.message.includes('429') ? 429 : 0);
+        if ((status === 429 || status === 503) && attempt < retries) {
+          const delay = (attempt + 1) * 15000;
+          console.log(`Rate limited, retrying in ${delay/1000}s (attempt ${attempt + 1}/${retries})...`);
+          await sleep(delay);
+          continue;
+        }
+        console.error("Gemini API error:", err.status, err.message);
+        throw err;
+      }
     }
   } else if (process.env.OPENAI_API_KEY) {
     const openai = new (require("openai"))({ apiKey: process.env.OPENAI_API_KEY });
@@ -152,8 +163,6 @@ Extract and return this JSON structure:
 }
 
 // ─── AI: Score candidates against JD ─────────────────────────────────────────
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 async function scoreCandidatesBatch(candidates, jd) {
   const batchSize = 2;
   const results = [];
