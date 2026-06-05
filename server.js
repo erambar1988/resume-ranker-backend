@@ -63,7 +63,7 @@ if (process.env.GEMINI_API_KEY) {
 }
 
 // AI generation function with retry on rate limit
-async function generateAIResponse(prompt, retries = 4) {
+async function generateAIResponse(prompt, retries = 2) {
   if (geminiModel) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -73,7 +73,7 @@ async function generateAIResponse(prompt, retries = 4) {
       } catch (err) {
         const status = err.status || (err.message && err.message.includes('429') ? 429 : 0);
         if ((status === 429 || status === 503) && attempt < retries) {
-          const delay = (attempt + 1) * 15000;
+          const delay = 5000;
           console.log(`Rate limited, retrying in ${delay/1000}s (attempt ${attempt + 1}/${retries})...`);
           await sleep(delay);
           continue;
@@ -176,7 +176,7 @@ Return this exact JSON:
 
 // ─── Process resumes in parallel batches ─────────────────────────────────────
 async function processResumesBatch(files, jd) {
-  const batchSize = 3;
+  const batchSize = 1;
   const results = [];
   for (let i = 0; i < files.length; i += batchSize) {
     const batch = files.slice(i, i + batchSize);
@@ -187,7 +187,7 @@ async function processResumesBatch(files, jd) {
       })
     );
     results.push(...batchResults);
-    if (i + batchSize < files.length) await sleep(3000);
+    if (i + batchSize < files.length) await sleep(4000);
   }
   return results;
 }
