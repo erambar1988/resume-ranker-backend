@@ -257,7 +257,8 @@ app.get("/api/drive/folder/:id", async (req, res) => {
 // Rank resumes from Google Drive folder
 app.post("/api/rank-drive", express.json(), async (req, res) => {
   try {
-    const { folderId, jd } = req.body;
+    const { folderId, jd, maxResumes } = req.body;
+    const limit = Math.min(parseInt(maxResumes) || 20, 50);
     
     if (!folderId) {
       return res.status(400).json({ error: "folderId is required" });
@@ -282,7 +283,7 @@ app.post("/api/rank-drive", express.json(), async (req, res) => {
       console.log(`Downloading ${current}/${total}: ${name}`);
     });
     
-    const validFiles = driveFiles.filter(f => !f.error);
+    const validFiles = driveFiles.filter(f => !f.error).slice(0, limit);
     
     if (validFiles.length === 0) {
       return res.status(400).json({ error: "No valid resume files found in folder" });
