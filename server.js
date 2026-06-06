@@ -116,20 +116,35 @@ async function extractText(buffer, filename) {
 
 // ─── AI: Extract info AND score in one call per resume ──────────────────────
 async function extractAndScore(resumeText, filename, jd) {
-  const prompt = `You are an expert HR analyst and technical recruiter.
-Analyze this resume against the job description and return ONLY valid JSON, no markdown.
+  const preferredLocation = jd.location || jd.other || "";
+  const prompt = `You are a strict HR analyst and technical recruiter. Evaluate the resume RIGOROUSLY.
 
 JOB DESCRIPTION:
 Role: ${jd.role}
-Required Skills: ${jd.skills}
+Required Skills (ALL must match for high score): ${jd.skills}
 Experience Required: ${jd.experience} years
 Notice Period Acceptable: ${jd.notice}
-Other Requirements: ${jd.other || "None"}
+Preferred Location: ${preferredLocation}
+
+STRICT SCORING RULES:
+1. skill_match: Count ONLY skills explicitly mentioned in the resume that match required skills. 
+   Formula: (matched skills / total required skills) * 100. 
+   If candidate has 2 out of 4 required skills = 50%. Do NOT give credit for partial or unrelated skills.
+2. match_score: Weighted average — skill_match(50%) + experience_match(30%) + notice_match(20%).
+   PENALIZE heavily if fewer than half the required skills are present.
+3. experience_match: If required is ${jd.experience} years and candidate has less = proportional score. Over-experienced is 100%.
+4. notice_match: 100 if within acceptable notice, 50 if slightly over, 0 if way over or unknown.
+5. Location: If preferred location is specified and candidate is in a DIFFERENT city, deduct 15 points from match_score. Same city = no deduction.
+6. recommendation: 
+   - "Strong Match" ONLY if match_score >= 80
+   - "Good Match" if 65-79
+   - "Moderate Match" if 45-64
+   - "Weak Match" if < 45
 
 RESUME (${filename}):
 ${resumeText.substring(0, 3500)}
 
-Return this exact JSON:
+Return ONLY this exact JSON, no markdown, no extra text:
 {
   "name": "Full name or 'Unknown'",
   "email": "email or ''",
@@ -149,7 +164,7 @@ Return this exact JSON:
   "strengths": ["point1"],
   "gaps": ["gap1"],
   "recommendation": "Strong Match",
-  "reasoning": "2-3 sentence explanation"
+  "reasoning": "2-3 sentence explanation mentioning skill match count and location"
 }`;
 
   try {
