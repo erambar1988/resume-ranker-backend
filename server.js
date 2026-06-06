@@ -127,15 +127,16 @@ Notice Period Acceptable: ${jd.notice}
 Preferred Location: ${preferredLocation}
 
 STRICT SCORING RULES:
-1. skill_match: Count ONLY skills explicitly mentioned in the resume that match required skills. 
-   Formula: (matched skills / total required skills) * 100. 
+1. skill_match (60% weight): Count ONLY skills explicitly mentioned in the resume that match required skills.
+   Formula: (matched skills / total required skills) * 100.
    If candidate has 2 out of 4 required skills = 50%. Do NOT give credit for partial or unrelated skills.
-2. match_score: Weighted average — skill_match(50%) + experience_match(30%) + notice_match(20%).
+2. experience_match (5% weight): If required is ${jd.experience} years and candidate has less = proportional score. Over-experienced = 100%.
+3. notice_match (20% weight): 100 if within acceptable notice period, 50 if slightly over, 0 if way over or unknown.
+4. location_match (15% weight): 100 if candidate city matches preferred location, 0 if different city or unknown.
+   If no preferred location specified, give everyone 100 for location_match.
+5. match_score = (skill_match * 0.60) + (experience_match * 0.05) + (notice_match * 0.20) + (location_match * 0.15)
    PENALIZE heavily if fewer than half the required skills are present.
-3. experience_match: If required is ${jd.experience} years and candidate has less = proportional score. Over-experienced is 100%.
-4. notice_match: 100 if within acceptable notice, 50 if slightly over, 0 if way over or unknown.
-5. Location: If preferred location is specified and candidate is in a DIFFERENT city, deduct 15 points from match_score. Same city = no deduction.
-6. recommendation: 
+6. recommendation:
    - "Strong Match" ONLY if match_score >= 80
    - "Good Match" if 65-79
    - "Moderate Match" if 45-64
@@ -161,6 +162,7 @@ Return ONLY this exact JSON, no markdown, no extra text:
   "skill_match": 0,
   "experience_match": 0,
   "notice_match": 0,
+  "location_match": 0,
   "strengths": ["point1"],
   "gaps": ["gap1"],
   "recommendation": "Strong Match",
