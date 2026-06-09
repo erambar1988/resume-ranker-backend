@@ -63,7 +63,7 @@ if (process.env.GEMINI_API_KEY) {
 }
 
 // AI generation function with retry on rate limit
-async function generateAIResponse(prompt, retries = 2) {
+async function generateAIResponse(prompt, retries = 3) {
   if (geminiModel) {
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
@@ -73,7 +73,7 @@ async function generateAIResponse(prompt, retries = 2) {
       } catch (err) {
         const status = err.status || (err.message && err.message.includes('429') ? 429 : 0);
         if ((status === 429 || status === 503) && attempt < retries) {
-          const delay = 5000;
+          const delay = 8000 * (attempt + 1);
           console.log(`Rate limited, retrying in ${delay/1000}s (attempt ${attempt + 1}/${retries})...`);
           await sleep(delay);
           continue;
