@@ -170,6 +170,10 @@ Return ONLY this exact JSON, no markdown, no extra text:
 }`;
 
   try {
+    if (!resumeText || resumeText.trim().length < 50) {
+      console.error(`Empty or too short text for ${filename}, length: ${resumeText?.length}`);
+      throw new Error("Empty resume text");
+    }
     const content = await generateAIResponse(prompt);
     const jsonMatch = content.match(/```json\s*([\s\S]*?)```/) || content.match(/```\s*([\s\S]*?)```/) || [null, content];
     const jsonStr = jsonMatch[1].trim();
